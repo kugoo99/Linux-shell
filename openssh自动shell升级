@@ -1,0 +1,313 @@
+#!/bin/bash
+#################################################################
+######    update openssl openssh scirpt                 #########
+#####                                                       #####
+######                                                    #####
+######        LastModified:2018/12/3                     #######
+####  Warning:start telnet service before use the script    #####
+#################################################################
+
+
+####################################################################################
+#			update openssh and openssl
+				#########
+				  #####
+				    ##
+####################################################################################
+#Determine whether the current system installed gcc compiler tools		
+
+zlib_version="zlib-1.2.8"
+openssl_version="openssl-1.0.2l"
+openssh_version="openssh-7.5p1"
+sh1="7.5.sh"
+gcc_path=`which gcc`
+#gcc_name=`basename $gcc_path`
+
+DATE=$(date +%Y%m%d)
+
+# OS TYPE
+#Distributor_ID=$(lsb_release -i)
+Distributor=`uname -a|cut -c 1-10`
+# Determine whether the root user
+userid=`id -u`
+if [ "$userid" -ne 0 ]; then
+	echo "sorry,only root can execute the script. "
+	exit
+fi
+
+
+# SET SELINUX=disabled
+# if [ "$Distributor" != "SUSE LINUX" ]; then
+#	sed -i '/SELINUX/s/enforcing/disabled/' /etc/selinux/config
+#	setenforce 0
+#fi
+
+# pam-devel,tcp_wrappers-devel need be installed, Otherwise, the software will install failure
+# Support for tcpwrappers/libwrap has been removed in openssh6.7 
+
+#if ! rpm -qa|grep pam-devel &>/dev/null; then
+#	echo "pam-devel is not installed" && exit
+#fi
+
+#if ! rpm -qa|grep tcp_wrappers-devel &>/dev/null; then
+#	echo "tcp_wrappers-devel not installed" && exit
+#fi
+
+#  Check whether to open the telnet service
+#telnet running--------
+#if netstat -tnlp | grep -w 22 &> /dev/null; 
+ # then
+  #echo "telnet service is running--------[no]"
+  #else
+rpm -ivh xinetd-2.3.14-40.el6.x86_64.rpm
+rpm -ivh telnet-server-0.17-48.el6.x86_64.rpm
+sed -i '/disable/s/yes/no/' /etc/xinetd.d/telnet
+service xinetd restart
+#fi
+
+netstat -tnlp | grep -w 23
+
+RETVAL3=$?
+if [ $RETVAL3 -eq 0 ]; then
+	echo "telnet service is running------------[yes]"
+else
+    
+	echo "telnet service is running--------[no]"
+	exit
+fi
+
+
+# Determine whether to install gcc package
+if [ -e "$gcc_path" ]; then
+	echo "gcc is installed----------------[yes]"
+else	
+	echo "gcc is not installed------------[no]"
+	exit 
+fi
+
+# stop sshd service 
+netstat -tnlp | grep -w 22
+RETVAL4=$?
+if [ $RETVAL4 -eq 0 ]; then
+	service sshd stop
+	echo "stop sshd service --------------[yes]"
+fi
+
+if [ -e /etc/init.d/sshd ]; then
+cp /etc/init.d/sshd /etc/init.d/sshd_old2016
+fi
+
+
+# remove openssh*.rpm if exists
+#if rpm -qa | grep openssh &> /dev/null;	then
+#rpm -qa | grep openssh > openssh_list.txt
+
+#while read line
+#do
+#	rpm -e $line --nodeps
+#	echo "remove $line success------------[yes]"
+#done < openssh_list.txt
+#fi
+
+###########install zlib ##################
+tar -zxvf "${zlib_version}.tar.gz" > /dev/null
+cd $zlib_version
+./configure --prefix=/usr/local/zlib-1.2.8/
+
+RETVAL5=$?
+
+if [ $RETVAL5 -ne 0 ]; then
+	echo "Configure zlib has encountered an error"
+	exit
+fi
+
+make
+
+RETVAL6=$?
+
+
+if [ $RETVAL6 -ne 0 ]; then
+	echo "make zlib has encountered an error"
+	exit
+fi
+
+make install
+cd ..
+echo "#########################################################"
+echo "################                        #################"
+echo "################  zlib install success   #################"
+echo "################                        #################"
+echo "#########################################################"
+sleep 2
+########## install openssl #############
+tar -zxvf "${openssl_version}.tar.gz" > /dev/null
+cd $openssl_version
+./config --prefix=/usr/local/openssl-1.0.2l/ shared
+
+RETVAL7=$?
+
+
+if [ $RETVAL7 -ne 0 ]; then
+	echo "Configure openssl has encountered an error"
+	exit
+fi
+
+make
+
+RETVAL8=$?
+
+if [ $RETVAL8 -ne 0 ]; then
+	echo "make openssl has encountered an error"
+	exit
+fi
+
+make install 
+
+if [ -e /usr/bin/openssl ]; then
+	mv /usr/bin/openssl /usr/bin/openssl.OFF_$DATE && ln -s /usr/local/openssl-1.0.2l/bin/openssl /usr/bin/openssl
+else
+	ln -s /usr/local/openssl-1.0.2l/bin/openssl /usr/bin/openssl
+fi
+
+if [ -e /usr/include/openssl ]; then
+	mv /usr/include/openssl /usr/include/openssl.OFF_$DATE && ln -s /usr/local/openssl-1.0.2l/include/openssl /usr/include/openssl
+else
+	ln -s /usr/local/openssl-1.0.2l/include/openssl /usr/include/openssl
+fi
+## Add "/usr/local/ssl/lib" to /etc/ld.so.conf 
+
+ssl_lib=`grep -w "/usr/local/ssl/lib" /etc/ld.so.conf` 
+if [ ! -e "$ssl_lib" ]; then
+	sed -i '/openssl/'d /etc/ld.so.conf 
+	echo "/usr/local/openssl-1.0.2l/lib" >> /etc/ld.so.conf
+fi
+
+
+ldconfig -v
+
+cd ..
+
+echo "#########################################################"
+echo "################                        #################"
+echo "################ openssl install sucess  ################"
+echo "################                        #################"
+echo "#########################################################"
+sleep 2
+############# install openssh ##############
+if [ -e /etc/ssh ]; then
+	mv /etc/ssh /etc/ssh_$DATE
+fi
+
+tar -zxvf "${openssh_version}.tar.gz" > /dev/null
+cd $openssh_version
+./configure --prefix=/usr/local/openssh7.5p1/ --sysconfdir=/etc/ssh --with-zlib=/usr/local/zlib-1.2.8/ --with-ssl-dir=/usr/local/openssl-1.0.2l/ --with-md5-passwords
+
+RETVAL9=$?
+
+
+if [ $RETVAL9 -ne 0 ]; then
+	echo "Configure openssh has encountered an error"
+	exit
+fi
+
+make
+
+RETVAL10=$?
+
+
+if [ $RETVAL10 -ne 0 -a $RETVAL10 -ne 0 ]; then
+        echo "make openssh has encountered an error"
+        exit
+fi
+
+make install
+
+if [ "$Distributor" == "SUSE LINUX" ]; then
+	cd contrib/suse
+	cp rc.sshd /etc/init.d/sshd
+	chmod +x /etc/init.d/sshd
+	chkconfig --add sshd
+else
+
+    cp -rf ssh /usr/bin/ssh
+    chmod 777 /usr/bin/ssh
+	chkconfig --add sshd
+	cd contrib/redhat
+	mv /etc/init.d/sshd /etc/init.d/sshd_$DATE 
+	cp sshd.init /etc/init.d/sshd
+	chmod +x /etc/init.d/sshd
+	chmod -R 755 /usr/local/openssl-1.0.2l/
+	chkconfig --add sshd
+
+#	mv /usr/bin/ssh /usr/bin/ssh.old2016
+#	cp -rf /usr/local/openssh7.4p1/ssh /usr/bin/ssh
+#	chmod 777 /usr/bin/ssh
+
+	mv /usr/sbin/sshd /usr/sbin/sshd.old_$DATE
+	cp -rf /usr/local/openssh7.5p1/sbin/sshd /usr/sbin/sshd
+	mv /usr/bin/ssh-keygen /usr/bin/ssh-keygen.old_$DATE
+	cp -rf /usr/local/openssh7.5p1/bin/ssh-keygen /usr/bin/ssh-keygen
+	sed -i '/sftp-server/'d	/etc/ssh/sshd_config
+	sed -i '112a Subsystem\tsftp\t/usr/libexec/openssh/sftp-server'	/etc/ssh/sshd_config
+
+fi
+#A generic PAM configuration is included as "contrib/sshd.pam.generic",
+#you may need to edit it before using it on your system.
+
+cd ..
+#cp sshd.pam.generic /etc/pam.d/sshd
+#sed -i 's/\/lib\/security\///g' /etc/pam.d/sshd
+
+# Modify /etc/ssh/sshd_config
+# Backup /etc/ssh/sshd_config
+cp -p /etc/ssh/sshd_config /etc/ssh/sshd_config_bak_$DATE
+
+# The default set of ciphers and MACs has been altered to
+# remove unsafe algorithms. In particular, CBC ciphers and arcfour*
+# are disabled by default. 
+# Changes since OpenSSH 6.6
+echo "KexAlgorithms diffie-hellman-group1-sha1,diffie-hellman-group14-sha1,diffie-hellman-group-exchange-sha1,diffie-hellman-group-exchange-sha256,ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,diffie-hellman-group1-sha1,curve25519-sha256@libssh.org" >> /etc/ssh/sshd_config
+echo "Ciphers aes128-cbc,aes192-cbc,aes256-cbc,aes128-ctr,aes192-ctr,aes256-ctr,3des-cbc,arcfour128,arcfour256,arcfour,blowfish-cbc,cast128-cbc" >> /etc/ssh/sshd_config
+echo "MACs hmac-md5,hmac-sha1,umac-64@openssh.com,hmac-ripemd160,hmac-sha1-96,hmac-md5-96" >> /etc/ssh/sshd_config
+
+# Disable root access via ssh to server
+#* The default for the sshd_config(5) PermitRootLogin option has changed from "yes" to "prohibit-password".
+#* PermitRootLogin=without-password/prohibit-password now bans all
+#interactive authentication methods, allowing only public-key,
+#hostbased and GSSAPI authentication (previously it permitted
+#keyboard-interactive and password-less authentication if those
+#were enabled).
+#PermitRootLogin prohibit-password is the default since version 7.0p1
+
+#sed -i 's/^#PermitRootLogin/PermitRootLogin/' /etc/ssh/sshd_config
+#sed -i '/PermitRootLogin/s/yes/no/' /etc/ssh/sshd_config
+#sed -i '/PermitRootLogin/s/prohibit-password/no/' /etc/ssh/sshd_config
+
+# Set 'UsePAM no' to 'UsePAM yes' to enable PAM authentication, account processing, 
+# and session processing
+#sed -i '/^#UsePAM no/a UsePAM yes' /etc/ssh/sshd_config
+
+# Start sshd process
+
+service sshd start
+chkconfig sshd on
+# Disable telnet service
+if netstat -tnlp | grep -w 22 &> /dev/null; then
+
+sed -i '/disable/s/no/yes/' /etc/xinetd.d/telnet
+
+service xinetd stop
+fi
+sshd -v
+mv /root/.ssh/known_hosts /root/.ssh/known_hosts_$DATE
+cp -rf /home/4auser/7.5/7.5.sh /home/4auser/7.5/openssh-7.5p1/7.5.sh
+rm -rf /home/dwchenweiqiang/7.5/7.5.sh
+rm -rf /home/4auser/7.5/7.5.sh
+echo "#########################################################"
+echo "################                        #################"
+echo "################ openssh7.5 install sucess  ################"
+echo "################                        #################"
+echo "#########################################################"
+echo "###############   ssh version     ################################################# "
+echo "################################################################################### "
+rm -rf $sh1
