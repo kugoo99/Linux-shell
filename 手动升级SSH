@@ -1,0 +1,71 @@
+
+1.安装zlib
+
+解压：tar -xvf zlib-1.2.8*
+cd /home/4auser/7.4zlib-1.2.8
+编译：./configure --prefix=/usr/local/zlib-1.2.8/
+安装：make && make install
+
+
+2.安装openssl
+rpm -e openssl --allmatches --nodeps
+cd /home/4auser/7.4
+解压：tar -xvf openssl-1.0*
+cd /home/4auser/7.4/openssl-1.0.2l
+编译：./config --prefix=/usr/local/openssl-1.0.2l/ shared
+安装：make && make install
+rm -fr /usr/bin/openssl
+rm -fr /usr/include/openssl
+mv /usr/bin/openssl /usr/bin/openssl.OFF
+ln -s /usr/local/openssl-1.0.2l/bin/openssl /usr/bin/openssl
+ln -s /usr/local/openssl-1.0.2l/include/openssl /usr/include/openssl
+echo "/usr/local/openssl-1.0.2l/lib" >> /etc/ld.so.conf
+/sbin/ldconfig –v
+
+
+
+3.安装openssh
+
+mv /etc/ssh /etc/ssh_old
+
+rpm -e openssh --allmatches --nodeps
+cd /home/4auser/7.4
+解压：tar -xvf openssh-7.3*
+cd /home/4auser/7.4openssh-7.4p1
+如果出现openssl header错误，则将/usr/local/openssl-1.0.2l/lib/libcrypto.so.1.0.0拷贝到/lib64下
+
+rm -rf /lib64/libcrypto.so.1.0.0
+mv /lib64/libcrypto.so.1.0.0 /lib64/libcrypto.so.1.0.0.old
+ln -s /usr/local/openssl-1.0.2l/lib/libcrypto.so.1.0.0 /lib64/libcrypto.so.1.0.0
+chmod 777 /lib64/libcrypto.so.1.0.0
+
+
+编译:./configure --prefix=/usr/local/openssh7.5p1 --sysconfdir=/etc/ssh --with-zlib=/usr/local/zlib-1.2.8/ --with-ssl-dir=/usr/local/openssl-1.0.2l/ -with-md5-passwords
+安装：make && make install
+
+4.配置
+
+make install完成后需要配置以下：
+mv /etc/init.d/sshd /etc/init.d/sshd.old     
+cp contrib/redhat/sshd.init /etc/init.d/sshd
+chmod u+x /etc/init.d/sshd
+
+chmod -R 755 /usr/local/openssl-1.0.2l/
+chmod 777 /usr/bin/ssh
+chkconfig --add sshd
+
+mv /usr/bin/ssh /usr/bin/ssh.old
+cp ssh /usr/bin/ssh
+chmod 777 /usr/bin/ssh
+
+
+mv /usr/sbin/sshd /usr/sbin/sshd.old
+cp -rfp /usr/local/openssh7.5p1/sbin/sshd  /usr/sbin/sshd 
+
+mv /etc/ssh/sshd_config /etc/ssh/sshd_config_old
+cp -p sshd_config /etc/ssh/sshd_config
+ 
+mv /usr/bin/ssh-keygen /usr/bin/ssh-keygen.old
+cp -rf /usr/local/openssh7.5p1/bin/ssh-keygen /usr/bin/ssh-keygen
+
+/etc/init.d/sshd restart
