@@ -1,0 +1,106 @@
+#!/bin/bash 
+#version 2.0 
+#安装版本 5.6.20-5.6.25 
+#安装要求： 
+#需要可以联网，若无网络，可以先创建/data目录，将安装包上传到/data目录下 
+  
+#判断/data目录是否存在，若不存在则创建，并且下载mysql 
+datamenu="/data"
+read -p "Input a mysql version:" -t 30 mysql_version 
+read -p "Input a mysql port:" -t 30 mysql_port 
+read -p "Input a mysql_server_id:" -t 30 mysql_server_id 
+mysqlfile="$datamenu/mysql-$mysql_version-linux-glibc2.5-x86_64.tar.gz"
+  
+if [ ! -d "$datamenu" ];then
+  mkdir "$datamenu"
+  wget -P /data http://dev.mysql.com/get/Downloads/MySQL-5.6/mysql-$mysql_version-linux-glibc2.5-x86_64.tar.gz 
+elif [ ! -f "$mysqlfile" ];then
+  wget -P /data http://dev.mysql.com/get/Downloads/MySQL-5.6/mysql-$mysql_version-linux-glibc2.5-x86_64.tar.gz 
+fi
+  
+#解压下载好的mysql 
+cd /opt
+mkdir mysql 
+cd mysql 
+tar zxvf $mysqlfile -C /opt/mysql
+  
+#创建mysql用户 
+  
+egrep "^mysql" /etc/group >& /dev/null
+if [ $? -ne 0 ] 
+then
+ groupadd mysql 
+fi
+  
+#create user if not exists 
+egrep "^mysql" /etc/passwd >& /dev/null
+if [ $? -ne 0 ] 
+then
+ useradd -g mysql -s /sbin/nologin -d /usr/local/mysql mysql 
+fi
+  
+  
+#创建mysql软连接，并授权给mysql用户 
+cd /usr/local/
+rm -rf /usr/local/mysql
+ln -s /opt/mysql/mysql-$mysql_version-linux-glibc2.5-x86_64 /usr/local/mysql
+chown -R mysql:mysql /usr/local/mysql
+chown -R mysql:mysql /usr/local/mysql/
+  
+#基于配置文件，创建mysql安装目录，并授权 
+mkdir -p /data/mysql
+mkdir -p /data/mysql/mysql${mysql_port} 
+cd /data/mysql/mysql${mysql_port}/ 
+mkdir /data/mysql/mysql${mysql_port}/data
+mkdir /data/mysql/mysql${mysql_port}/logs
+mkdir /data/mysql/mysql${mysql_port}/tmp
+chown -R mysql:mysql /data/mysql/mysql${mysql_port} 
+  
+cat > /etc/my.cnf << EOF 
+  
+[client] 
+port   = ${mysql_port} 
+socket   = /tmp/mysql.sock 
+  
+# The MySQL server 
+[mysqld] 
+# Basic 
+port   = ${mysql_port} 
+user  = mysql 
+basedir   = /usr/local/mysql
+datadir   = /data/mysql/mysql${mysql_port}/data
+tmpdir   = /data/mysql/mysql${mysql_port}/tmp
+socket   = /tmp/mysql.sock 
+  
+log-bin  = /data/mysql/mysql${mysql_port}/logs/mysql-bin
+  
+log-error = error.log 
+slow-query-log-file = slow.log 
+skip-external-locking 
+skip-name-resolve 
+log-slave-updates 
+  
+lower_case_table_names = 1 #忽略表名大小写 
+  
+character_set_server   = gbk 
+innodb_file_per_table   = 1 
+innodb_autoinc_lock_mode  = 2 
+  
+explicit_defaults_for_timestamp = true
+sql_mode=NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES 
+  
+EOF 
+  
+  
+#初始化mysql 
+  
+cd /usr/local/mysql
+./scripts/mysql_install_db --defaults-file=/etc/my.cnf 
+  
+  
+#在/etc/init.d下创建mysql 启动脚本 
+cp /usr/local/mysql/support-files/mysql.server /etc/init.d/mysql
+  
+  
+#添加环境变量，并使/etc/profile环境变量生效 
+echo "export PATH=$PATH:/usr/local/mysql/bin">>/etc/profile
