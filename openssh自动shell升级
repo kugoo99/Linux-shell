@@ -300,9 +300,7 @@ service xinetd stop
 fi
 sshd -v
 mv /root/.ssh/known_hosts /root/.ssh/known_hosts_$DATE
-cp -rf /home/4auser/7.5/7.5.sh /home/4auser/7.5/openssh-7.5p1/7.5.sh
-rm -rf /home/dwchenweiqiang/7.5/7.5.sh
-rm -rf /home/4auser/7.5/7.5.sh
+
 echo "#########################################################"
 echo "################                        #################"
 echo "################ openssh7.5 install sucess  ################"
